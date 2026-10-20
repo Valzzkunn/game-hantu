@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horror Escape: Teror Nenek Kuntilanak</title>
+    <!-- Tailwind CSS for UI overlays -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Three.js for 3D First-Person Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020205;
+            color: #f4f4f5;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-horror {
+            font-family: 'Creepster', cursive;
+            letter-spacing: 2px;
+        }
+        .font-arcade {
+            font-family: 'Press Start 2P', monospace;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .blood-glow {
+            text-shadow: 0 0 15px rgba(220, 38, 38, 0.9), 0 0 30px rgba(185, 28, 28, 0.6);
+        }
+        .scanlines {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.35) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.03),
+                rgba(0, 255, 0, 0.01),
+                rgba(0, 0, 255, 0.03)
+            );
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden relative bg-black">
+
+    <!-- CRT Scanline overlay -->
+    <div class="absolute inset-0 scanlines z-10 pointer-events-none"></div>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- HUD Overlay -->
+    <div id="hud" class="absolute inset-0 z-20 pointer-events-none flex flex-col justify-between p-4 md:p-6 hidden">
+        <!-- Top Bar -->
+        <div class="flex justify-between items-center bg-black/70 border border-red-950/80 rounded-xl px-4 py-3 backdrop-blur-md pointer-events-auto">
+            <div>
+                <h1 class="font-horror text-xl text-red-500 blood-glow">RUMAH ANGKER (ESCAPE)</h1>
+                <p id="objectiveText" class="text-xs text-amber-300 font-arcade mt-0.5">Misi: Temukan Kunci Pintu Utama!</p>
+            </div>
+            <div class="flex items-center space-x-6">
+                <div class="text-right">
+                    <div class="text-[9px] text-zinc-400 font-arcade">INVENTORY</div>
+                    <div id="inventoryDisplay" class="font-arcade text-xs text-emerald-400 mt-1">Kosong 🎒</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[9px] text-zinc-400 font-arcade">KESEHATAN NYALI</div>
+                    <div id="healthDisplay" class="font-arcade text-xs text-rose-500 mt-1">❤️ 100%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Crosshair & Interaction Prompt -->
+        <div class="self-center flex flex-col items-center justify-center">
+            <div class="w-2 h-2 rounded-full bg-white/70 border border-black shadow-lg"></div>
+            <div id="interactPrompt" class="mt-3 bg-black/85 border border-amber-500/60 px-4 py-1.5 rounded-lg text-xs text-amber-300 font-arcade opacity-0 transition-opacity duration-200 shadow-xl">
+                [E] Ambil / Buka
+            </div>
+        </div>
+
+        <!-- Bottom Mobile / Helper Instructions -->
+        <div class="flex justify-between items-end">
+            <div class="bg-black/80 border border-zinc-800 p-3 rounded-xl text-[11px] text-zinc-300 backdrop-blur-md max-w-xs">
+                <p class="font-bold text-red-400 mb-1">🕹️ Kontrol Permainan:</p>
+                <p>• Gerak: <kbd class="bg-zinc-800 px-1 py-0.5 rounded">W A S D</kbd></p>
+                <p>• Lihat: Gerakkan Mouse / Kursor</p>
+                <p>• Interaksi: Tekan <kbd class="bg-zinc-800 px-1 py-0.5 rounded">E</kbd> dekat objek</p>
+            </div>
+            <div id="warningNotice" class="text-red-500 font-horror text-2xl blood-glow animate-pulse hidden">
+                HANTU MENDEKAT! LARI!
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Screen Overlay -->
+    <div id="startScreen" class="absolute inset-0 bg-black/95 backdrop-blur-lg flex flex-col items-center justify-center p-6 text-center z-30">
+        <div class="text-6xl md:text-8xl mb-3 animate-bounce">🏚️ 👻 🗝️</div>
+        <h2 class="font-horror text-5xl md:text-7xl text-red-600 blood-glow mb-3">RUMAH TERKUTUK</h2>
+        <p class="text-zinc-300 max-w-lg text-xs md:text-sm mb-6 leading-relaxed">
+            Kamu terjebak di dalam rumah tua berhantu milik Nenek Kuntilanak. Cari <span class="text-amber-400 font-semibold">Kunci Utama</span> yang tersembunyi di dalam salah satu kamar dan kabur sebelum ia menangkapmu!
+        </p>
+        <div class="bg-zinc-900/90 border border-zinc-800 p-4 rounded-xl text-xs text-zinc-300 mb-6 max-w-md text-left">
+            <p class="font-semibold text-red-400 mb-2">⚠️ Aturan Bertahan Hidup:</p>
+            <p class="mb-1">1. Hindari kontak langsung dengan hantu di lorong.</p>
+            <p class="mb-1">2. Periksa meja dan lemari untuk mencari kunci.</p>
+            <p>3. Nyalakan suara perangkat untuk efek horor maksimal.</p>
+        </div>
+        <button id="startButton" class="font-arcade bg-gradient-to-r from-red-700 to-rose-800 hover:from-red-600 hover:to-rose-700 text-white font-bold py-4 px-10 rounded-xl shadow-2xl transform transition active:scale-95 border border-red-500/50 text-sm md:text-base">
+            MASUK KE RUMAH (START)
+        </button>
+    </div>
+
+    <!-- Game Over / Jumpscare Screen -->
+    <div id="gameOverScreen" class="absolute inset-0 bg-black/98 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center z-30 hidden">
+        <div class="text-7xl mb-2 animate-pulse">😱🩸</div>
+        <h2 class="font-horror text-5xl md:text-7xl text-red-600 blood-glow mb-2">TERTANGKAP HANTU!</h2>
+        <p class="text-zinc-400 text-xs md:text-sm mb-6 font-arcade italic">"Hihihi... Kamu tidak bisa keluar dari rumah ini..."</p>
+        <button id="restartButton" class="font-arcade bg-gradient-to-r from-red-700 to-rose-800 hover:from-red-600 hover:to-rose-700 text-white font-bold py-3 px-8 rounded-xl shadow-2xl transform transition active:scale-95 border border-red-500/50 text-sm md:text-base">
+            COBA LAGI
+        </button>
+    </div>
+
+    <!-- Victory Screen -->
+    <div id="winScreen" class="absolute inset-0 bg-emerald-950/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center z-30 hidden">
+        <div class="text-7xl mb-2 animate-bounce">🚪✨🎉</div>
+        <h2 class="font-horror text-5xl md:text-7xl text-emerald-400 mb-2">SELAMAT! KAMU BERHASIL KABUR</h2>
+        <p class="text-zinc-200 text-xs md:text-sm mb-6 font-arcade">Kamu berhasil melarikan diri dari rumah terkutuk.</p>
+        <button id="winRestartButton" class="font-arcade bg-gradient-to-r from-emerald-700 to-teal-800 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-3 px-8 rounded-xl shadow-2xl transform transition active:scale-95 border border-emerald-500/50 text-sm md:text-base">
+            MAIN LAGI
+        </button>
+    </div>
+
+    <!-- Game Script -->
+    <script>
+        // --- Web Audio Horror Sound Effects ---
+        class SoundManager {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            playTone(freq, type, duration, gainVal) {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            }
+            playPickUp() {
+                this.init();
+                this.playTone(523.25, 'triangle', 0.1, 0.2);
+                setTimeout(() => this.playTone(783.99, 'sine', 0.2, 0.25), 100);
+            }
+            playDoorUnlock() {
+                this.init();
+                this.playTone(200, 'sawtooth', 0.3, 0.3);
+            }
+            playJumpscare() {
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(100, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(700, this.ctx.currentTime + 0.5);
+                    gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.7);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.7);
+                } catch(e) {}
+            }
+        }
+
+        const soundManager = new SoundManager();
+
+        // --- Three.js 3D Setup ---
+        let scene, camera, renderer;
+        let player = {
+            x: 0, z: 0,
+            radius: 0.5,
+            speed: 3.5,
+            hasKey: false,
+            health: 100
+        };
+
+        let ghost = {
+            mesh: null,
+            x: -8, z: -8,
+            speed: 1.8
+        };
+
+        let interactables = []; // Keys, doors, tables
+        let gameState = 'START'; // START, PLAYING, GAMEOVER, WIN
+
+        // Keyboard tracking
+        const keys = { KeyW: false, KeyS: false, KeyA: false, KeyD: false };
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let pitchObject, yawObject;
+        let isPointerLocked = false;
+
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f0f17); // Lighter background tint
+            scene.fog = new THREE.FogExp2(0x0f0f17, 0.05); // Less dense fog
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            yawObject = new THREE.Object3D();
+            pitchObject = new THREE.Object3D();
+            pitchObject.add(camera);
+            yawObject.add(pitchObject);
+            scene.add(yawObject);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Lighting (Brighter ambient + stronger player flashlight)
+            const ambientLight = new THREE.AmbientLight(0x333344, 1.4);
+            scene.add(ambientLight);
+
+            const flashlight = new THREE.PointLight(0xfff7ed, 2.5, 20);
+            flashlight.position.set(0, 0, 0);
+            camera.add(flashlight);
+
+            buildHouse();
+            buildGhost();
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            renderer.domElement.addEventListener('click', () => {
+                if (gameState === 'PLAYING' && !isPointerLocked) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+
+            document.addEventListener('mousemove', onMouseMove);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+            isPointerLocked = document.pointerLockElement === renderer.domElement;
+        });
+
+        function onMouseMove(event) {
+            if (!isPointerLocked || gameState !== 'PLAYING') return;
+            const movementX = event.movementX || event.mozMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || 0;
+
+            yawObject.rotation.y -= movementX * 0.0025;
+            pitchObject.rotation.x -= movementY * 0.0025;
+            pitchObject.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchObject.rotation.x));
+        }
+
+        function onKeyDown(e) {
+            if (e.code === 'KeyW') moveForward = true;
+            if (e.code === 'KeyS') moveBackward = true;
+            if (e.code === 'KeyA') moveLeft = true;
+            if (e.code === 'KeyD') moveRight = true;
+            if (e.code === 'KeyE') checkInteraction();
+        }
+
+        function onKeyUp(e) {
+            if (e.code === 'KeyW') moveForward = false;
+            if (e.code === 'KeyS') moveBackward = false;
+            if (e.code === 'KeyA') moveLeft = false;
+            if (e.code === 'KeyD') moveRight = false;
+        }
+
+        // --- Build Horror House Rooms & Furniture ---
+        let walls = [];
+        let keyObject = null;
+        let doorObject = null;
+
+        function buildHouse() {
+            // Textured / detailed abandoned house floor (dark wood/tile look)
+            const floorGeo = new THREE.PlaneGeometry(36, 36);
+            const floorMat = new THREE.MeshStandardMaterial({ 
+                color: 0x1c1917, 
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+
+            // Ceiling (dark rotten wood)
+            const ceilGeo = new THREE.PlaneGeometry(36, 36);
+            const ceilMat = new THREE.MeshStandardMaterial({ color: 0x0c0a09, roughness: 0.95 });
+            const ceil = new THREE.Mesh(ceilGeo, ceilMat);
+            ceil.rotation.x = Math.PI / 2;
+            ceil.position.y = 4.5;
+            scene.add(ceil);
+
+            // Abandoned Wall Material with peeling wallpaper / weathered look
+            const wallMat = new THREE.MeshStandardMaterial({ 
+                color: 0x292524, 
+                roughness: 0.85,
+                metalness: 0.05
+            });
+
+            // Outer Perimeter Walls (Bigger haunted mansion size: 36x36)
+            createWall(0, 2.25, -18, 36, 4.5, 0.6, wallMat);
+            createWall(0, 2.25, 18, 36, 4.5, 0.6, wallMat);
+            createWall(-18, 2.25, 0, 0.6, 4.5, 36, wallMat);
+            createWall(18, 2.25, 0, 0.6, 4.5, 36, wallMat);
+
+            // Interior Room Partitions (Creating multiple eerie rooms, corridors, and hallways)
+            // Living room & hallway walls
+            createWall(-6, 2.25, -4, 0.6, 4.5, 18, wallMat); // Left wing divider
+            createWall(6, 2.25, 2, 0.6, 4.5, 16, wallMat);  // Right wing divider
+            createWall(-12, 2.25, 6, 12, 4.5, 0.6, wallMat); // Back room wall 1
+            createWall(12, 2.25, -6, 10, 4.5, 0.6, wallMat); // Back room wall 2
+
+            // Wooden pillars for structural atmosphere
+            const pillarMat = new THREE.MeshStandardMaterial({ color: 0x18120b, roughness: 0.9 });
+            createPillar(-6, 2.25, -13, pillarMat);
+            createPillar(6, 2.25, -13, pillarMat);
+            createPillar(-6, 2.25, 10, pillarMat);
+            createPillar(6, 2.25, 10, pillarMat);
+
+            // Exit Main Door (At the front wall)
+            const doorGeo = new THREE.BoxGeometry(2.2, 3.5, 0.4);
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.7 });
+            doorObject = new THREE.Mesh(doorGeo, doorMat);
+            doorObject.position.set(0, 1.75, 17.7);
+            scene.add(doorObject);
+
+            interactables.push({
+                type: 'door',
+                mesh: doorObject,
+                x: 0, z: 17.5,
+                radius: 2.2,
+                action: () => {
+                    if (player.hasKey) {
+                        soundManager.playDoorUnlock();
+                        triggerWin();
+                    } else {
+                        showPrompt("Pintu terkunci gembok! Cari Kunci Utama.");
+                    }
+                }
+            });
+
+            // Spawn Key in the deep corner room of the haunted house
+            const keyGeo = new THREE.BoxGeometry(0.5, 0.1, 0.9);
+            const keyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.1 });
+            keyObject = new THREE.Mesh(keyGeo, keyMat);
+            keyObject.position.set(-14, 0.4, -14);
+            scene.add(keyObject);
+
+            interactables.push({
+                type: 'key',
+                mesh: keyObject,
+                x: -14, z: -14,
+                radius: 1.6,
+                action: () => {
+                    soundManager.playPickUp();
+                    player.hasKey = true;
+                    scene.remove(keyObject);
+                    interactables = interactables.filter(item => item.type !== 'key');
+                    document.getElementById('inventoryDisplay').innerText = '🔑 Kunci Utama (Diambil)';
+                    document.getElementById('objectiveText').innerText = 'Misi: Lari ke Pintu Utama di Depan!';
+                    showPrompt("Kamu mendapatkan Kunci Utama!");
+                }
+            });
+
+            // Add creepy abandoned furniture (broken tables, decaying cabinets, barrels)
+            const woodPropMat = new THREE.MeshStandardMaterial({ color: 0x271c12, roughness: 0.9 });
+            const ironPropMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, metalness: 0.8, roughness: 0.4 });
+            
+            createFurniture(10, 1, -12, 2.5, 2, 1.2, woodPropMat); // Old wardrobe
+            createFurniture(-10, 0.75, 12, 2, 1.5, 2, woodPropMat);   // Broken table
+            createFurniture(12, 0.6, 12, 1.5, 1.2, 1.5, ironPropMat); // Iron barrel cluster
+            createFurniture(-12, 1, -2, 1.2, 2, 2.5, woodPropMat);    // Cabinet
+        }
+
+        function createWall(x, y, z, w, h, d, mat) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+            walls.push({ x, z, w, d });
+        }
+
+        function createPillar(x, y, z, mat) {
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 4.5, 8), mat);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+            walls.push({ x, z, w: 0.8, d: 0.8 });
+        }
+
+        function createFurniture(x, y, z, w, h, d, mat) {
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+            walls.push({ x, z, w, d });
+        }
+
+        function buildGhost() {
+            // Detailed terrifying Kuntilanak ghost 3D model
+            const ghostGroup = new THREE.Group();
+            
+            // Tattered flowing white shroud/dress
+            const robeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.9, flatShading: true });
+            const robeGeo = new THREE.ConeGeometry(0.7, 2.8, 6);
+            const robe = new THREE.Mesh(robeGeo, robeMat);
+            robe.position.y = 1.4;
+            ghostGroup.add(robe);
+
+            // Pale ghostly head
+            const headGeo = new THREE.SphereGeometry(0.38, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.8 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.85;
+            ghostGroup.add(head);
+
+            // Glowing terrifying red eyes
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const eyeGeo = new THREE.SphereGeometry(0.06, 6, 6);
+            
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.12, 2.9, 0.3);
+            ghostGroup.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.12, 2.9, 0.3);
+            ghostGroup.add(rightEye);
+
+            // Long tangled dark hair hanging down
+            const hairGeo = new THREE.BoxGeometry(0.7, 1.2, 0.5);
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 1 });
+            const hair = new THREE.Mesh(hairGeo, hairMat);
+            hair.position.set(0, 2.7, -0.1);
+            ghostGroup.add(hair);
+
+            // Reaching ghostly arms
+            const armGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.4, 6);
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+
+            const leftArm = new THREE.Mesh(armGeo, armMat);
+            leftArm.rotation.z = Math.PI / 4;
+            leftArm.position.set(-0.6, 2.1, 0.4);
+            ghostGroup.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, armMat);
+            rightArm.rotation.z = -Math.PI / 4;
+            rightArm.position.set(0.6, 2.1, 0.4);
+            ghostGroup.add(rightArm);
+
+            ghostGroup.position.set(ghost.x, 0, ghost.z);
+            scene.add(ghostGroup);
+            ghost.mesh = ghostGroup;
+        }
+
+        function showPrompt(text) {
+            const prompt = document.getElementById('interactPrompt');
+            prompt.innerText = text;
+            prompt.style.opacity = '1';
+            setTimeout(() => { prompt.style.opacity = '0'; }, 2500);
+        }
+
+        function checkInteraction() {
+            for (let item of interactables) {
+                let dist = Math.hypot(yawObject.position.x - item.x, yawObject.position.z - item.z);
+                if (dist < item.radius) {
+                    item.action();
+                    break;
+                }
+            }
+        }
+
+        // Collision Check against walls
+        function checkCollision(nx, nz) {
+            for (let w of walls) {
+                let minX = w.x - w.w / 2 - player.radius;
+                let maxX = w.x + w.w / 2 + player.radius;
+                let minZ = w.z - w.d / 2 - player.radius;
+                let maxZ = w.z + w.d / 2 + player.radius;
+
+                if (nx > minX && nx < maxX && nz > minZ && nz < maxZ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Game Loop
+        let clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (gameState === 'PLAYING') {
+                const delta = clock.getDelta();
+
+                // Player Movement
+                let dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+                dir.y = 0;
+                dir.normalize();
+
+                let sideDir = new THREE.Vector3(-dir.z, 0, dir.x);
+
+                let moveX = 0, moveZ = 0;
+                if (moveForward) { moveX += dir.x * player.speed * delta; moveZ += dir.z * player.speed * delta; }
+                if (moveBackward) { moveX -= dir.x * player.speed * delta; moveZ -= dir.z * player.speed * delta; }
+                if (moveLeft) { moveX -= sideDir.x * player.speed * delta; moveZ -= sideDir.z * player.speed * delta; }
+                if (moveRight) { moveX += sideDir.x * player.speed * delta; moveZ += sideDir.z * player.speed * delta; }
+
+                let nextX = yawObject.position.x + moveX;
+                let nextZ = yawObject.position.z + moveZ;
+
+                if (!checkCollision(nextX, yawObject.position.z)) yawObject.position.x = nextX;
+                if (!checkCollision(yawObject.position.x, nextZ)) yawObject.position.z = nextZ;
+
+                // Ghost AI tracking player
+                let ghostTargetX = yawObject.position.x;
+                let ghostTargetZ = yawObject.position.z;
+                let gAngle = Math.atan2(ghostTargetZ - ghost.z, ghostTargetX - ghost.x);
+                ghost.x += Math.cos(gAngle) * ghost.speed * delta;
+                ghost.z += Math.sin(gAngle) * ghost.speed * delta;
+                ghost.mesh.position.set(ghost.x, 0, ghost.z);
+
+                // Check distance to player for jumpscare
+                let distToGhost = Math.hypot(yawObject.position.x - ghost.x, yawObject.position.z - ghost.z);
+                if (distToGhost < 1.4) {
+                    triggerGameOver();
+                }
+
+                // Warning indicator if ghost is close
+                const warning = document.getElementById('warningNotice');
+                if (distToGhost < 6) {
+                    warning.classList.remove('hidden');
+                } else {
+                    warning.classList.add('hidden');
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function startGame() {
+            soundManager.init();
+            gameState = 'PLAYING';
+            yawObject.position.set(0, 0, 10); // Start near front
+            yawObject.rotation.y = Math.PI;
+
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('winScreen').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+
+            renderer.domElement.requestPointerLock();
+            clock.start();
+        }
+
+        function triggerGameOver() {
+            gameState = 'GAMEOVER';
+            document.exitPointerLock();
+            soundManager.playJumpscare();
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        function triggerWin() {
+            gameState = 'WIN';
+            document.exitPointerLock();
+            document.getElementById('hud').classList.add('hidden');
+            document.getElementById('winScreen').classList.remove('hidden');
+        }
+
+        document.getElementById('startButton').addEventListener('click', startGame);
+        document.getElementById('restartButton').addEventListener('click', startGame);
+        document.getElementById('winRestartButton').addEventListener('click', startGame);
+
+        init3D();
+        animate();
+    </script>
+</body>
+</html>
